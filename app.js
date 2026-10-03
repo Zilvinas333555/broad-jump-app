@@ -1,11 +1,13 @@
-// Stage 2: video intake. Stage 3: player and frame controls.
+// Stage 2: video intake. Stage 3: player. Stage 5: footage checks gate the flow.
 import { inspectVideoFile } from "./video-intake.js";
 import { readFrameTiming } from "./mp4-timing.js";
 import { loadPlayer } from "./player.js";
+import { sampleFootage, buildChecks } from "./footage-checks.js";
 
 const screens = {
   start: document.getElementById("screen-start"),
-  video: document.getElementById("screen-video"),
+  check: document.getElementById("screen-check"),
+  player: document.getElementById("screen-player"),
 };
 
 function showScreen(name) {
@@ -21,9 +23,20 @@ const intakeBox = document.getElementById("intake");
 const intakeStatus = document.getElementById("intake-status");
 const intakeDetails = document.getElementById("intake-details");
 const intakeBlockers = document.getElementById("intake-blockers");
+const checkStatus = document.getElementById("check-status");
+const checkProgress = document.getElementById("check-progress");
+const checkList = document.getElementById("check-list");
+const checkNote = document.getElementById("check-note");
+const checkBlockers = document.getElementById("check-blockers");
 const btnContinue = document.getElementById("btn-continue");
 
+const STATUS_ICON = { ok: "✓", warn: "⚠", block: "✖", unknown: "–" };
+
 let currentObjectUrl = null;
+let currentTiming = null;
+let currentInfo = null;
+// Each pick gets a run id, so a slow check for an old file cannot overwrite the new one.
+let runId = 0;
 
 function formatMB(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
@@ -33,12 +46,7 @@ function formatDuration(s) {
   return s == null ? "unknown" : s.toFixed(2) + " s";
 }
 
-function renderIntake(file, { objectUrl, result }) {
-  // Only the most recent file is kept; release the previous one.
-  if (currentObjectUrl && currentObjectUrl !== objectUrl) URL.revokeObjectURL(currentObjectUrl);
-  currentObjectUrl = objectUrl;
-
-  const { info, ok, blockers } = result;
+function renderIntake(file, info, ok, blockers) {
   intakeDetails.innerHTML = "";
   const rows = [
     ["File", file.name],
@@ -58,14 +66,79 @@ function renderIntake(file, { objectUrl, result }) {
   intakeBlockers.innerHTML = "";
   for (const msg of blockers) {
     const p = document.createElement("p");
+    p.className = "block-msg";
     p.textContent = msg;
     intakeBlockers.appendChild(p);
   }
 
   intakeStatus.textContent = ok ? "Video readable" : "Cannot analyze this video";
   intakeStatus.className = ok ? "status ok" : "status error";
-  btnContinue.disabled = !ok;
   intakeBox.hidden = false;
+}
+
+function renderChecks(result) {
+  checkList.innerHTML = "";
+  for (const c of result.checks) {
+    const li = document.createElement("li");
+    li.className = `check ${c.status}`;
+    const icon = document.createElement("span");
+    icon.className = "icon";
+    icon.textContent = STATUS_ICON[c.status] || "–";
+    const body = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = c.label;
+    const detail = document.createElement("div");
+    detail.className = "check-detail";
+    detail.textContent = c.detail;
+    body.append(label, detail);
+    li.append(icon, body);
+    checkList.appendChild(li);
+  }
+
+  checkBlockers.innerHTML = "";
+  if (result.blocked) {
+    checkStatus.textContent = "Cannot analyze this video";
+    checkStatus.className = "status error";
+  } else if (result.warnings > 0) {
+    checkStatus.textContent = `${result.warnings} warning${result.warnings === 1 ? "" : "s"}`;
+    checkStatus.className = "status warn";
+  } else {
+    checkStatus.textContent = "Footage looks good";
+    checkStatus.className = "status ok";
+  }
+  checkNote.hidden = !(result.warnings > 0 && !result.blocked);
+  btnContinue.disabled = result.blocked;
+}
+
+async function runChecks(id, objectUrl, timing) {
+  checkStatus.textContent = "Checking footage…";
+  checkStatus.className = "status";
+  checkList.innerHTML = "";
+  checkNote.hidden = true;
+  checkProgress.hidden = false;
+  checkProgress.textContent = "Sampling frames…";
+  btnContinue.disabled = true;
+
+  try {
+    const samples = await sampleFootage(objectUrl, timing, (k, n) => {
+      if (id === runId) checkProgress.textContent = `Sampling frame ${Math.min(k + 1, n)} of ${n}…`;
+    });
+    if (id !== runId) return;
+    const info = currentInfo;
+    renderChecks(buildChecks({ info, timing, samples }));
+  } catch (err) {
+    if (id !== runId) return;
+    checkStatus.textContent = "Checks could not run on this video";
+    checkStatus.className = "status error";
+    checkBlockers.innerHTML = "";
+    const p = document.createElement("p");
+    p.className = "block-msg";
+    p.textContent = err.message;
+    checkBlockers.appendChild(p);
+    btnContinue.disabled = true;
+  } finally {
+    if (id === runId) checkProgress.hidden = true;
+  }
 }
 
 async function onVideoPicked(event) {
@@ -73,26 +146,45 @@ async function onVideoPicked(event) {
   event.target.value = "";
   if (!file) return;
 
-  intakeBox.hidden = false;
-  intakeStatus.textContent = "Checking video…";
-  intakeStatus.className = "status";
-  intakeDetails.innerHTML = "";
-  intakeBlockers.innerHTML = "";
-  btnContinue.disabled = true;
-  showScreen("video");
+  const id = ++runId;
   document.getElementById("video-name").textContent = file.name;
+  intakeBox.hidden = true;
+  checkStatus.textContent = "Checking video…";
+  checkList.innerHTML = "";
+  btnContinue.disabled = true;
+  showScreen("check");
 
   const inspected = await inspectVideoFile(file);
-  renderIntake(file, inspected);
+  if (id !== runId) return;
+  currentInfo = inspected.result.info;
+  renderIntake(file, inspected.result.info, inspected.result.ok, inspected.result.blockers);
 
-  if (inspected.result.ok) {
-    const timing = await readFrameTiming(file);
-    loadPlayer(inspected.objectUrl, timing);
+  if (currentObjectUrl && currentObjectUrl !== inspected.objectUrl) URL.revokeObjectURL(currentObjectUrl);
+  currentObjectUrl = inspected.objectUrl;
+
+  if (!inspected.result.ok) {
+    checkStatus.textContent = "Cannot analyze this video";
+    checkStatus.className = "status error";
+    return;
   }
+
+  currentTiming = await readFrameTiming(file);
+  if (id !== runId) return;
+  loadPlayer(currentObjectUrl, currentTiming);
+  await runChecks(id, currentObjectUrl, currentTiming);
 }
 
 fileInput.addEventListener("change", onVideoPicked);
 fileCapture.addEventListener("change", onVideoPicked);
 
 document.getElementById("btn-record").addEventListener("click", () => fileCapture.click());
-document.getElementById("btn-back").addEventListener("click", () => showScreen("start"));
+document.getElementById("btn-check-back").addEventListener("click", () => {
+  runId++;
+  showScreen("start");
+});
+btnContinue.addEventListener("click", () => showScreen("player"));
+document.getElementById("btn-player-back").addEventListener("click", () => showScreen("check"));
+document.getElementById("btn-player-new").addEventListener("click", () => {
+  runId++;
+  showScreen("start");
+});

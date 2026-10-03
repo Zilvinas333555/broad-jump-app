@@ -42,10 +42,36 @@
 
   </section>
 
-  <!-- Screen 2: placeholder until Stage 2–3 build the real flow -->
-  <section id="screen-video" class="screen">
-    <div class="card player-card">
+  <!-- Screen 2: footage quality check. Warnings only; BLOCK stops the flow. -->
+  <section id="screen-check" class="screen">
+
+    <div id="intake" class="card" hidden>
+      <h2>File</h2>
       <p id="video-name" class="muted"></p>
+      <p id="intake-status" class="status"></p>
+      <ul id="intake-details" class="details"></ul>
+      <div id="intake-blockers"></div>
+    </div>
+
+    <div class="card">
+      <h2>Check your footage</h2>
+      <p id="check-status" class="status">Checking…</p>
+      <p id="check-progress" class="muted" hidden></p>
+      <ul id="check-list" class="details"></ul>
+      <p id="check-note" class="note" hidden>
+        Your footage can still be analyzed, but some measurements may be less reliable.
+      </p>
+      <div id="check-blockers"></div>
+    </div>
+
+    <button id="btn-continue" class="big-btn primary" type="button" disabled>Continue</button>
+    <button id="btn-check-back" class="big-btn secondary" type="button">Choose another video</button>
+
+  </section>
+
+  <!-- Screen 3: player -->
+  <section id="screen-player" class="screen">
+    <div class="card player-card">
       <video id="player-video" playsinline preload="auto"></video>
       <p id="readout" class="readout">0.000 s · frame 0</p>
       <input id="timeline" type="range" min="0" max="0" step="0.001" value="0" aria-label="Timeline" />
@@ -59,15 +85,8 @@
       <p id="player-warning" class="warning" hidden></p>
     </div>
 
-    <div id="intake" class="card" hidden>
-      <h2>Check your footage</h2>
-      <p id="intake-status" class="status"></p>
-      <ul id="intake-details" class="details"></ul>
-      <div id="intake-blockers"></div>
-    </div>
-
-    <button id="btn-continue" class="big-btn primary" type="button" disabled>Continue to calibration</button>
-    <button id="btn-back" class="big-btn secondary" type="button">Choose another video</button>
+    <button id="btn-player-back" class="big-btn secondary" type="button">Back to footage check</button>
+    <button id="btn-player-new" class="big-btn secondary" type="button">Choose another video</button>
   </section>
 
 </main>

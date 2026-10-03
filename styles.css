@@ -137,3 +137,32 @@ button:disabled, .big-btn:disabled { opacity: 0.4; }
 .frame-btn:active { opacity: 0.8; }
 .frame-btn:disabled { opacity: 0.35; }
 .warning { margin: 0; color: var(--warn); font-size: 14px; line-height: 1.4; }
+
+/* Stage 5: footage checks */
+.check { display: flex; gap: 12px; align-items: flex-start; }
+.check .icon {
+  flex: 0 0 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--border);
+  color: var(--text);
+}
+.check.ok .icon { background: #1e5e3d; color: #4dd48a; }
+.check.warn .icon { background: #5e4216; color: var(--warn); }
+.check.block .icon { background: #5e1e1e; color: #ff6b6b; }
+.check-detail { color: var(--muted); font-size: 13px; margin-top: 2px; line-height: 1.4; }
+.check strong { font-size: 15px; }
+.status.warn { color: var(--warn); }
+.block-msg { color: #ff6b6b; font-size: 14px; margin: 0 0 8px; }
+#check-list .check { padding: 10px 0; border-bottom: 1px solid var(--border); }
+#check-list .check:last-child { border-bottom: none; }
+/* Check rows reuse .details li for borders only; they must not space-between like key/value rows */
+#check-list li.check { display: flex; justify-content: flex-start; gap: 12px; align-items: flex-start; }
+#check-list li.check > div { flex: 1; text-align: left; }
+#check-list li.check .icon { color: inherit; }
+#check-list li.check span:first-child { color: inherit; }
