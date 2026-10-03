@@ -11,6 +11,9 @@ const el = {
   frameButtons: document.querySelectorAll("[data-step]"),
 };
 
+// The same element the checks use, so checks and playback go through one decoder.
+export const playerVideo = el.video;
+
 // Timing from mp4-timing.js, or null when it could not be read.
 let timing = null;
 // Frame we are seeking to. Taps during a seek build on this, not on currentTime,

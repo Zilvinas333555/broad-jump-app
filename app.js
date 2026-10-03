@@ -1,7 +1,7 @@
 // Stage 2: video intake. Stage 3: player. Stage 5: footage checks gate the flow.
 import { inspectVideoFile } from "./video-intake.js";
 import { readFrameTiming } from "./mp4-timing.js";
-import { loadPlayer } from "./player.js";
+import { loadPlayer, playerVideo } from "./player.js";
 import { sampleFootage, buildChecks } from "./footage-checks.js";
 
 const screens = {
@@ -110,18 +110,18 @@ function renderChecks(result) {
   btnContinue.disabled = result.blocked;
 }
 
-async function runChecks(id, objectUrl, timing) {
+async function runChecks(id, timing) {
   checkStatus.textContent = "Checking footage…";
   checkStatus.className = "status";
   checkList.innerHTML = "";
   checkNote.hidden = true;
   checkProgress.hidden = false;
-  checkProgress.textContent = "Sampling frames…";
+  checkProgress.textContent = "Checking frames…";
   btnContinue.disabled = true;
 
   try {
-    const samples = await sampleFootage(objectUrl, timing, (k, n) => {
-      if (id === runId) checkProgress.textContent = `Sampling frame ${Math.min(k + 1, n)} of ${n}…`;
+    const samples = await sampleFootage(playerVideo, timing, (k, n) => {
+      if (id === runId) checkProgress.textContent = `Checking frame ${Math.min(k + 1, n)} of ${n}…`;
     });
     if (id !== runId) return;
     const info = currentInfo;
@@ -171,7 +171,7 @@ async function onVideoPicked(event) {
   currentTiming = await readFrameTiming(file);
   if (id !== runId) return;
   loadPlayer(currentObjectUrl, currentTiming);
-  await runChecks(id, currentObjectUrl, currentTiming);
+  await runChecks(id, currentTiming);
 }
 
 fileInput.addEventListener("change", onVideoPicked);

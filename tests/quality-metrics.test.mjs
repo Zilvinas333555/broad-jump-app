@@ -120,11 +120,18 @@ test("video longer than 5 minutes warns but does not block", () => {
   assert.equal(r.blocked, false);
 });
 
-test("seeking failures on 2+ samples block", () => {
-  const samples = [goodSample(0), { seekOk: false }, { seekOk: false }, goodSample(3)];
+test("most seeks failing blocks", () => {
+  const samples = [goodSample(0), { seekOk: false }, { seekOk: false }, { seekOk: false }];
   const r = buildChecks({ info, timing, samples });
   assert.equal(statusOf(r, "navigation"), "block");
   assert.equal(r.blocked, true);
+});
+
+test("a few slow seeks warn but do not block (phones can be slow)", () => {
+  const samples = [goodSample(0), { seekOk: false }, goodSample(2), goodSample(3)];
+  const r = buildChecks({ info, timing, samples });
+  assert.equal(statusOf(r, "navigation"), "warn");
+  assert.equal(r.blocked, false);
 });
 
 test("one soft sample does not warn; most soft samples do", () => {

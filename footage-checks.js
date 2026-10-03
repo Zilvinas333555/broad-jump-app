@@ -7,9 +7,9 @@
 import { THRESHOLDS, laplacianVariance, exposureStats, halve, globalShift, median } from "./quality-metrics.js";
 import { timeOfFrame } from "./frame-math.js";
 
-export const SAMPLE_COUNT = 16;
+export const SAMPLE_COUNT = 8;
 const SAMPLE_WIDTH = 320;   // all sharpness and exposure numbers are measured at this width
-const SEEK_TIMEOUT_MS = 4000;
+const SEEK_TIMEOUT_MS = 6000;   // phones can take a few seconds for a 4K HEVC seek
 
 // samples: [{ seekOk, sharpness, darkPct, brightPct, motionGray }]
 export function buildChecks({ info, timing, samples }) {
@@ -49,16 +49,18 @@ export function buildChecks({ info, timing, samples }) {
     detail: `${info.durationS.toFixed(1)} s` + (longVideo ? " (longer than 5 minutes; still usable)" : ""),
   });
 
-  // Frame navigation: BLOCK if frames cannot be reliably reached.
+  // Frame navigation: BLOCK only when most seeks fail. A few slow seeks on a phone are a warning.
   const seekFailures = samples.filter((s) => !s.seekOk).length;
-  const navBlocked = samples.length > 0 && seekFailures >= 2;
+  const navBlocked = samples.length > 0 && seekFailures > samples.length / 2;
   checks.push({
     id: "navigation",
     label: "Frame navigation",
-    status: navBlocked ? "block" : "ok",
+    status: navBlocked ? "block" : seekFailures > 0 ? "warn" : "ok",
     detail: navBlocked
       ? `Seeking failed on ${seekFailures} of ${samples.length} sample frames`
-      : `Seeking worked on ${samples.length - seekFailures} of ${samples.length} sample frames`,
+      : seekFailures > 0
+        ? `${seekFailures} of ${samples.length} sample frames were slow to reach; checks used the rest`
+        : `Seeking worked on all ${samples.length} sample frames`,
   });
 
   const measured = samples.filter((s) => s.seekOk);
@@ -158,18 +160,15 @@ function frameToGray(video, canvas, ctx) {
   return { gray, w, h };
 }
 
-// Samples evenly spaced frames from a separate <video> so the player's position is untouched.
-// Returns one entry per sample, in time order.
-export async function sampleFootage(objectUrl, timing, onProgress = () => {}) {
-  const video = document.createElement("video");
-  video.muted = true;
-  video.playsInline = true;
-  video.preload = "auto";
-  video.src = objectUrl;
-  await new Promise((resolve, reject) => {
-    video.addEventListener("loadedmetadata", resolve, { once: true });
-    video.addEventListener("error", () => reject(new Error("Video could not be loaded for checks")), { once: true });
-  });
+// Samples evenly spaced frames using the player's own <video> element. A hidden second element
+// was unreliable on iPhone, where seeks on off-screen video did not complete.
+// The element's position is restored afterwards, so the player is not disturbed.
+export async function sampleFootage(video, timing, onProgress = () => {}) {
+  if (video.readyState < 2) {
+    await new Promise((resolve) => video.addEventListener("loadeddata", resolve, { once: true }));
+  }
+  const restoreTime = video.currentTime;
+  video.pause();
 
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -206,7 +205,6 @@ export async function sampleFootage(objectUrl, timing, onProgress = () => {}) {
   }
   onProgress(SAMPLE_COUNT, SAMPLE_COUNT);
 
-  video.removeAttribute("src");
-  video.load();
+  video.currentTime = restoreTime;
   return samples;
 }
