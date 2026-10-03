@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Broad Jump Measure</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Broad Jump</h1>
+  <p class="subtitle">Manual measurement from video. No AI.</p>
+</header>
+
+<main id="app">
+
+  <!-- Screen 1: start -->
+  <section id="screen-start" class="screen active">
+
+    <div class="card">
+      <h2>Before you record</h2>
+      <ul class="guide">
+        <li>Camera <strong>fixed</strong>, side-on to the jump direction.</li>
+        <li>Whole body and landing area in frame. Floor visible.</li>
+        <li>Calibration points on the <strong>same floor</strong>, close to the jump.</li>
+        <li>Athlete stays at the same distance from the camera.</li>
+      </ul>
+      <pre class="diagram">CAMERA → | ATHLETE →</pre>
+      <p class="note">
+        Two-point scaling only. Measurements get less accurate when the camera is
+        strongly angled or the jump and calibration points are at different depths.
+      </p>
+    </div>
+
+    <button id="btn-record" class="big-btn primary" type="button">Record video</button>
+    <label id="btn-upload" class="big-btn secondary" for="file-input">Upload video</label>
+    <input id="file-input" type="file" accept="video/*" hidden />
+
+    <!-- Recording uses the native camera app, so no in-page camera access is needed -->
+    <input id="file-capture" type="file" accept="video/*" capture="environment" hidden />
+
+  </section>
+
+  <!-- Screen 2: placeholder until Stage 2–3 build the real flow -->
+  <section id="screen-video" class="screen">
+    <div class="card player-card">
+      <p id="video-name" class="muted"></p>
+      <video id="player-video" playsinline preload="auto"></video>
+      <p id="readout" class="readout">0.000 s · frame 0</p>
+      <input id="timeline" type="range" min="0" max="0" step="0.001" value="0" aria-label="Timeline" />
+      <button id="btn-play" class="big-btn primary" type="button">Play</button>
+      <div class="frame-row" role="group" aria-label="Frame stepping">
+        <button class="frame-btn" type="button" disabled data-step="-5">−5</button>
+        <button class="frame-btn" type="button" disabled data-step="-1">−1</button>
+        <button class="frame-btn" type="button" disabled data-step="1">+1</button>
+        <button class="frame-btn" type="button" disabled data-step="5">+5</button>
+      </div>
+      <p id="player-warning" class="warning" hidden></p>
+    </div>
+
+    <div id="intake" class="card" hidden>
+      <h2>Check your footage</h2>
+      <p id="intake-status" class="status"></p>
+      <ul id="intake-details" class="details"></ul>
+      <div id="intake-blockers"></div>
+    </div>
+
+    <button id="btn-continue" class="big-btn primary" type="button" disabled>Continue to calibration</button>
+    <button id="btn-back" class="big-btn secondary" type="button">Choose another video</button>
+  </section>
+
+</main>
+
+<script src="app.js" type="module"></script>
+</body>
+</html>
