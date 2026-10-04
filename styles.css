@@ -179,3 +179,5 @@ button:disabled, .big-btn:disabled { opacity: 0.4; }
 }
 .preview-card { padding: 8px; }
 .preview-card .video-slot video { max-height: 35vh; }
+
+.check.pending .icon { background: var(--border); color: var(--muted); }

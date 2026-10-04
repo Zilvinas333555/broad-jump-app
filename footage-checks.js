@@ -11,10 +11,9 @@ export const SAMPLE_COUNT = 8;
 const SAMPLE_WIDTH = 320;   // all sharpness and exposure numbers are measured at this width
 const SEEK_TIMEOUT_MS = 6000;   // phones can take a few seconds for a 4K HEVC seek
 
-// samples: [{ seekOk, sharpness, darkPct, brightPct, motionGray }]
-export function buildChecks({ info, timing, samples }) {
+// Instant checks: read from the file's metadata, no frames needed.
+export function buildMetadataChecks({ info, timing }) {
   const checks = [];
-
   // Resolution: the shorter side matters for a side-on view of the whole body.
   if (info.width && info.height) {
     const short = Math.min(info.width, info.height);
@@ -48,7 +47,13 @@ export function buildChecks({ info, timing, samples }) {
     status: longVideo ? "warn" : "ok",
     detail: `${info.durationS.toFixed(1)} s` + (longVideo ? " (longer than 5 minutes; still usable)" : ""),
   });
+  return checks;
+}
 
+// Frame checks: need sampled frames, so they run in the background after the file is accepted.
+// samples: [{ seekOk, sharpness, darkPct, brightPct, motionGray, motionGrayNext }]
+export function buildFrameChecks({ samples }) {
+  const checks = [];
   // Frame navigation: BLOCK only when most seeks fail. A few slow seeks on a phone are a warning.
   const seekFailures = samples.filter((s) => !s.seekOk).length;
   const navBlocked = samples.length > 0 && seekFailures > samples.length / 2;
@@ -117,10 +122,18 @@ export function buildChecks({ info, timing, samples }) {
         : "Exposure looks usable",
     });
   }
+  return checks;
+}
 
+function summarize(checks) {
   const blocked = checks.some((c) => c.status === "block");
   const warnings = checks.filter((c) => c.status === "warn").length;
   return { checks, blocked, warnings };
+}
+
+// Everything at once (used by the tests and by any caller that has all the data).
+export function buildChecks({ info, timing, samples }) {
+  return summarize([...buildMetadataChecks({ info, timing }), ...buildFrameChecks({ samples })]);
 }
 
 // Seeks a video to a time and resolves true once the frame is ready, false on timeout.
@@ -163,7 +176,8 @@ function frameToGray(video, canvas, ctx) {
 // Samples evenly spaced frames using the player's own <video> element. A hidden second element
 // was unreliable on iPhone, where seeks on off-screen video did not complete.
 // The element's position is restored afterwards, so the player is not disturbed.
-export async function sampleFootage(video, timing, onProgress = () => {}) {
+// isCancelled() is checked between samples, so a newer pick can stop an older check.
+export async function sampleFootage(video, timing, onProgress = () => {}, isCancelled = () => false) {
   if (video.readyState < 2) {
     await new Promise((resolve) => video.addEventListener("loadeddata", resolve, { once: true }));
   }
@@ -175,6 +189,7 @@ export async function sampleFootage(video, timing, onProgress = () => {}) {
   const samples = [];
 
   for (let k = 0; k < SAMPLE_COUNT; k++) {
+    if (isCancelled()) break;
     onProgress(k, SAMPLE_COUNT);
     // With frame timing, sample by frame number. Without it, fall back to evenly spaced times.
     const target = timing

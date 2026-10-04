@@ -2,7 +2,7 @@
 import { inspectVideoFile } from "./video-intake.js";
 import { readFrameTiming } from "./mp4-timing.js";
 import { loadPlayer, playerVideo } from "./player.js";
-import { sampleFootage, buildChecks } from "./footage-checks.js";
+import { sampleFootage, buildMetadataChecks, buildFrameChecks } from "./footage-checks.js";
 
 const screens = {
   start: document.getElementById("screen-start"),
@@ -37,7 +37,8 @@ const checkNote = document.getElementById("check-note");
 const checkBlockers = document.getElementById("check-blockers");
 const btnContinue = document.getElementById("btn-continue");
 
-const STATUS_ICON = { ok: "✓", warn: "⚠", block: "✖", unknown: "–" };
+const STATUS_ICON = { ok: "✓", warn: "⚠", block: "✖", unknown: "–", pending: "…" };
+const playerNotice = document.getElementById("player-notice");
 
 let currentObjectUrl = null;
 let currentTiming = null;
@@ -83,9 +84,10 @@ function renderIntake(file, info, ok, blockers) {
   intakeBox.hidden = false;
 }
 
-function renderChecks(result) {
+// Shows a list of checks plus the summary line and the Continue state.
+function renderChecks(checks, { pending = false } = {}) {
   checkList.innerHTML = "";
-  for (const c of result.checks) {
+  for (const c of checks) {
     const li = document.createElement("li");
     li.className = `check ${c.status}`;
     const icon = document.createElement("span");
@@ -102,47 +104,69 @@ function renderChecks(result) {
     checkList.appendChild(li);
   }
 
-  checkBlockers.innerHTML = "";
-  if (result.blocked) {
+  const blocked = checks.some((c) => c.status === "block");
+  const warnings = checks.filter((c) => c.status === "warn").length;
+  if (blocked) {
     checkStatus.textContent = "Cannot analyze this video";
     checkStatus.className = "status error";
-  } else if (result.warnings > 0) {
-    checkStatus.textContent = `${result.warnings} warning${result.warnings === 1 ? "" : "s"}`;
+  } else if (pending) {
+    checkStatus.textContent = "Basic checks passed. Frame checks running…";
+    checkStatus.className = "status";
+  } else if (warnings > 0) {
+    checkStatus.textContent = `${warnings} warning${warnings === 1 ? "" : "s"}`;
     checkStatus.className = "status warn";
   } else {
     checkStatus.textContent = "Footage looks good";
     checkStatus.className = "status ok";
   }
-  checkNote.hidden = !(result.warnings > 0 && !result.blocked);
-  btnContinue.disabled = result.blocked;
+  checkNote.hidden = !(warnings > 0 && !blocked);
+  btnContinue.disabled = blocked;
 }
 
-async function runChecks(id, timing) {
-  checkStatus.textContent = "Checking footage…";
-  checkStatus.className = "status";
-  checkList.innerHTML = "";
-  checkNote.hidden = true;
+// Instant: shown the moment the file is readable. Continue is enabled straight away
+// unless the metadata itself blocks.
+function showMetadataChecks(id, info, timing) {
+  if (id !== runId) return;
+  const metadata = buildMetadataChecks({ info, timing });
+  const pendingRow = { id: "frames", label: "Frame checks", status: "pending", detail: "Sharpness, exposure, camera movement and navigation" };
+  renderChecks([...metadata, pendingRow], { pending: true });
+}
+
+// Background: samples frames and replaces the pending row with the real results.
+async function runFrameChecks(id, info, timing) {
   checkProgress.hidden = false;
   checkProgress.textContent = "Checking frames…";
-  btnContinue.disabled = true;
-
   try {
-    const samples = await sampleFootage(playerVideo, timing, (k, n) => {
-      if (id === runId) checkProgress.textContent = `Checking frame ${Math.min(k + 1, n)} of ${n}…`;
-    });
+    const samples = await sampleFootage(
+      playerVideo,
+      timing,
+      (k, n) => {
+        if (id === runId) checkProgress.textContent = `Checking frame ${Math.min(k + 1, n)} of ${n}…`;
+      },
+      () => id !== runId,
+    );
     if (id !== runId) return;
-    const info = currentInfo;
-    renderChecks(buildChecks({ info, timing, samples }));
+    const all = [...buildMetadataChecks({ info, timing }), ...buildFrameChecks({ samples })];
+    renderChecks(all);
+    const blocked = all.some((c) => c.status === "block");
+    if (blocked) {
+      const msg = all.find((c) => c.status === "block").detail;
+      checkBlockers.innerHTML = "";
+      const p = document.createElement("p");
+      p.className = "block-msg";
+      p.textContent = msg;
+      checkBlockers.appendChild(p);
+      playerNotice.textContent = msg;
+      playerNotice.hidden = false;
+    }
   } catch (err) {
     if (id !== runId) return;
-    checkStatus.textContent = "Checks could not run on this video";
-    checkStatus.className = "status error";
-    checkBlockers.innerHTML = "";
-    const p = document.createElement("p");
-    p.className = "block-msg";
-    p.textContent = err.message;
-    checkBlockers.appendChild(p);
-    btnContinue.disabled = true;
+    // A failed background check is a warning, not a block: the user can still measure.
+    const all = [
+      ...buildMetadataChecks({ info, timing }),
+      { id: "frames", label: "Frame checks", status: "warn", detail: `Could not run: ${err.message}` },
+    ];
+    renderChecks(all);
   } finally {
     if (id === runId) checkProgress.hidden = true;
   }
@@ -156,15 +180,18 @@ async function onVideoPicked(event) {
   const id = ++runId;
   document.getElementById("video-name").textContent = file.name;
   intakeBox.hidden = true;
+  playerNotice.hidden = true;
   checkStatus.textContent = "Checking video…";
   checkList.innerHTML = "";
+  checkBlockers.innerHTML = "";
+  checkNote.hidden = true;
   btnContinue.disabled = true;
   showScreen("check");
 
   const inspected = await inspectVideoFile(file);
   if (id !== runId) return;
-  currentInfo = inspected.result.info;
-  renderIntake(file, inspected.result.info, inspected.result.ok, inspected.result.blockers);
+  const info = inspected.result.info;
+  renderIntake(file, info, inspected.result.ok, inspected.result.blockers);
 
   if (currentObjectUrl && currentObjectUrl !== inspected.objectUrl) URL.revokeObjectURL(currentObjectUrl);
   currentObjectUrl = inspected.objectUrl;
@@ -177,8 +204,11 @@ async function onVideoPicked(event) {
 
   currentTiming = await readFrameTiming(file);
   if (id !== runId) return;
+  currentInfo = info;
   loadPlayer(currentObjectUrl, currentTiming);
-  await runChecks(id, currentTiming);
+  showMetadataChecks(id, info, currentTiming);
+  // Not awaited: the user can continue while frames are checked in the background.
+  runFrameChecks(id, info, currentTiming);
 }
 
 fileInput.addEventListener("change", onVideoPicked);
