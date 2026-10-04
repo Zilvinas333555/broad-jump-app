@@ -48,6 +48,11 @@ function seekToFrame(n) {
   render();
 }
 
+// Frame number currently shown (or being sought to); used to record where a calibration point was placed.
+export function currentFrameIndex() {
+  return currentFrame();
+}
+
 export function stepFrames(delta) {
   if (!timing) return;
   pause();

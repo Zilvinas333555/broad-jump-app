@@ -42,15 +42,8 @@
 
   </section>
 
-  <!-- Screen 2: footage quality check. Warnings only; BLOCK stops the flow. -->
+  <!-- Screen 2: shown only while a file is read, or when it cannot be used at all -->
   <section id="screen-check" class="screen">
-
-    <!-- The one video element. It is visible here during checks (iPhone will not seek hidden video) and moves to the player on Continue. -->
-    <div class="card preview-card">
-      <div id="preview-slot" class="video-slot">
-        <video id="player-video" playsinline preload="auto"></video>
-      </div>
-    </div>
 
     <div id="intake" class="card" hidden>
       <h2>File</h2>
@@ -60,26 +53,17 @@
       <div id="intake-blockers"></div>
     </div>
 
-    <div class="card">
-      <h2>Check your footage</h2>
-      <p id="check-status" class="status">Checking…</p>
-      <p id="check-progress" class="muted" hidden></p>
-      <ul id="check-list" class="details"></ul>
-      <p id="check-note" class="note" hidden>
-        Your footage can still be analyzed, but some measurements may be less reliable.
-      </p>
-      <div id="check-blockers"></div>
-    </div>
-
-    <button id="btn-continue" class="big-btn primary" type="button" disabled>Continue</button>
     <button id="btn-check-back" class="big-btn secondary" type="button">Choose another video</button>
 
   </section>
 
-  <!-- Screen 3: player -->
+  <!-- Screen 3: player and calibration -->
   <section id="screen-player" class="screen">
     <div class="card player-card">
-      <div id="player-slot" class="video-slot"></div>
+      <div id="player-slot" class="video-slot">
+        <video id="player-video" playsinline preload="auto"></video>
+        <canvas id="calib-overlay" aria-label="Calibration points"></canvas>
+      </div>
       <p id="readout" class="readout">0.000 s · frame 0</p>
       <input id="timeline" type="range" min="0" max="0" step="0.001" value="0" aria-label="Timeline" />
       <button id="btn-play" class="big-btn primary" type="button">Play</button>
@@ -90,10 +74,33 @@
         <button class="frame-btn" type="button" disabled data-step="5">+5</button>
       </div>
       <p id="player-warning" class="warning" hidden></p>
+      <div id="footage-notes" hidden>
+        <p class="notes-title">Footage notes</p>
+        <ul id="footage-notes-list" class="notes-list"></ul>
+        <p class="note">Your footage can still be analyzed, but some measurements may be less reliable.</p>
+      </div>
       <p id="player-notice" class="block-msg" hidden></p>
     </div>
 
-    <button id="btn-player-back" class="big-btn secondary" type="button">Back to footage check</button>
+    <div class="card calib-card">
+      <h2>Calibration</h2>
+      <p class="muted">Tap two points on the same floor whose real distance you know, such as two court lines 580 cm apart.</p>
+      <p id="calib-step" class="status">Tap point A on the floor</p>
+      <div class="calib-row">
+        <button id="btn-set-a" class="big-btn secondary" type="button">Set A</button>
+        <button id="btn-set-b" class="big-btn secondary" type="button">Set B</button>
+      </div>
+      <label class="field-label" for="calib-cm">Real distance between A and B (cm)</label>
+      <input id="calib-cm" class="text-input" type="number" inputmode="decimal" min="1" step="any" placeholder="e.g. 580" />
+      <button id="btn-calib-save" class="big-btn primary" type="button" disabled>Save calibration</button>
+      <p id="calib-result" class="muted"></p>
+      <p class="note">
+        For best results, use two known points on the same floor plane and close to the jump area.
+        V1 uses simple two-point scaling, not perspective correction, so measurements can become
+        less accurate when the camera is strongly angled or the jump and calibration points are at different depths.
+      </p>
+    </div>
+
     <button id="btn-player-new" class="big-btn secondary" type="button">Choose another video</button>
   </section>
 

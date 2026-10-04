@@ -181,3 +181,41 @@ button:disabled, .big-btn:disabled { opacity: 0.4; }
 .preview-card .video-slot video { max-height: 35vh; }
 
 .check.pending .icon { background: var(--border); color: var(--muted); }
+
+/* Stage 6: calibration overlay sits exactly over the video picture */
+#player-slot { position: relative; }
+#calib-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+.calib-card { display: flex; flex-direction: column; gap: 10px; }
+.calib-card h2 { margin: 0; }
+.calib-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.calib-row .big-btn.selected { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.field-label { font-size: 14px; color: var(--muted); }
+.text-input {
+  min-height: 56px;
+  width: 100%;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 18px;
+}
+.text-input:focus { outline: 3px solid var(--accent); outline-offset: 1px; }
+
+/* Footage notes on the player */
+#footage-notes {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #1f1a12;
+}
+.notes-title { margin: 0 0 6px; font-size: 13px; color: var(--warn); text-transform: uppercase; letter-spacing: 0.05em; }
+.notes-list { margin: 0 0 6px; padding-left: 18px; font-size: 14px; line-height: 1.5; }
+#footage-notes .note { font-size: 12px; }

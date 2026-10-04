@@ -1,8 +1,9 @@
-// Stage 2: video intake. Stage 3: player. Stage 5: footage checks gate the flow.
+// Stage 2: intake. Stage 3: player. Stage 5: footage checks (notes only, never a gate). Stage 6: calibration.
 import { inspectVideoFile } from "./video-intake.js";
 import { readFrameTiming } from "./mp4-timing.js";
-import { loadPlayer, playerVideo } from "./player.js";
+import { loadPlayer, playerVideo, currentFrameIndex } from "./player.js";
 import { sampleFootage, buildMetadataChecks, buildFrameChecks } from "./footage-checks.js";
+import { mountCalibration } from "./calibration.js";
 
 const screens = {
   start: document.getElementById("screen-start"),
@@ -10,17 +11,10 @@ const screens = {
   player: document.getElementById("screen-player"),
 };
 
-// The video element moves between the check preview and the player. It must stay visible
-// (not display:none) while frames are being checked, or iPhone Safari stops seeking.
-const previewSlot = document.getElementById("preview-slot");
-const playerSlot = document.getElementById("player-slot");
-
 function showScreen(name) {
   for (const [key, el] of Object.entries(screens)) {
     el.classList.toggle("active", key === name);
   }
-  if (name === "check") previewSlot.appendChild(playerVideo);
-  if (name === "player") playerSlot.appendChild(playerVideo);
   window.scrollTo(0, 0);
 }
 
@@ -30,19 +24,25 @@ const intakeBox = document.getElementById("intake");
 const intakeStatus = document.getElementById("intake-status");
 const intakeDetails = document.getElementById("intake-details");
 const intakeBlockers = document.getElementById("intake-blockers");
-const checkStatus = document.getElementById("check-status");
-const checkProgress = document.getElementById("check-progress");
-const checkList = document.getElementById("check-list");
-const checkNote = document.getElementById("check-note");
-const checkBlockers = document.getElementById("check-blockers");
-const btnContinue = document.getElementById("btn-continue");
+const notesBox = document.getElementById("footage-notes");
+const notesTitle = notesBox.querySelector(".notes-title");
+const notesList = document.getElementById("footage-notes-list");
 
-const STATUS_ICON = { ok: "✓", warn: "⚠", block: "✖", unknown: "–", pending: "…" };
-const playerNotice = document.getElementById("player-notice");
+const calibration = mountCalibration({
+  video: playerVideo,
+  canvas: document.getElementById("calib-overlay"),
+  els: {
+    step: document.getElementById("calib-step"),
+    setA: document.getElementById("btn-set-a"),
+    setB: document.getElementById("btn-set-b"),
+    cm: document.getElementById("calib-cm"),
+    save: document.getElementById("btn-calib-save"),
+    result: document.getElementById("calib-result"),
+  },
+  currentFrame: currentFrameIndex,
+});
 
 let currentObjectUrl = null;
-let currentTiming = null;
-let currentInfo = null;
 // Each pick gets a run id, so a slow check for an old file cannot overwrite the new one.
 let runId = 0;
 
@@ -84,91 +84,34 @@ function renderIntake(file, info, ok, blockers) {
   intakeBox.hidden = false;
 }
 
-// Shows a list of checks plus the summary line and the Continue state.
-function renderChecks(checks, { pending = false } = {}) {
-  checkList.innerHTML = "";
-  for (const c of checks) {
+// Notes appear only when something needs attention. A clean file shows nothing.
+function renderNotes(checks, { pending = false } = {}) {
+  const issues = checks.filter((c) => c.status === "warn" || c.status === "block");
+  notesTitle.textContent = pending ? "Checking footage…" : "Footage notes";
+  notesList.innerHTML = "";
+  for (const c of issues) {
     const li = document.createElement("li");
-    li.className = `check ${c.status}`;
-    const icon = document.createElement("span");
-    icon.className = "icon";
-    icon.textContent = STATUS_ICON[c.status] || "–";
-    const body = document.createElement("div");
     const label = document.createElement("strong");
-    label.textContent = c.label;
-    const detail = document.createElement("div");
-    detail.className = "check-detail";
-    detail.textContent = c.detail;
-    body.append(label, detail);
-    li.append(icon, body);
-    checkList.appendChild(li);
+    label.textContent = c.label + ": ";
+    li.append(label, document.createTextNode(c.detail));
+    notesList.appendChild(li);
   }
-
-  const blocked = checks.some((c) => c.status === "block");
-  const warnings = checks.filter((c) => c.status === "warn").length;
-  if (blocked) {
-    checkStatus.textContent = "Cannot analyze this video";
-    checkStatus.className = "status error";
-  } else if (pending) {
-    checkStatus.textContent = "Basic checks passed. Frame checks running…";
-    checkStatus.className = "status";
-  } else if (warnings > 0) {
-    checkStatus.textContent = `${warnings} warning${warnings === 1 ? "" : "s"}`;
-    checkStatus.className = "status warn";
-  } else {
-    checkStatus.textContent = "Footage looks good";
-    checkStatus.className = "status ok";
-  }
-  checkNote.hidden = !(warnings > 0 && !blocked);
-  btnContinue.disabled = blocked;
+  notesBox.hidden = !pending && issues.length === 0;
 }
 
-// Instant: shown the moment the file is readable. Continue is enabled straight away
-// unless the metadata itself blocks.
-function showMetadataChecks(id, info, timing) {
-  if (id !== runId) return;
-  const metadata = buildMetadataChecks({ info, timing });
-  const pendingRow = { id: "frames", label: "Frame checks", status: "pending", detail: "Sharpness, exposure, camera movement and navigation" };
-  renderChecks([...metadata, pendingRow], { pending: true });
-}
-
-// Background: samples frames and replaces the pending row with the real results.
 async function runFrameChecks(id, info, timing) {
-  checkProgress.hidden = false;
-  checkProgress.textContent = "Checking frames…";
   try {
-    const samples = await sampleFootage(
-      playerVideo,
-      timing,
-      (k, n) => {
-        if (id === runId) checkProgress.textContent = `Checking frame ${Math.min(k + 1, n)} of ${n}…`;
-      },
-      () => id !== runId,
-    );
+    const samples = await sampleFootage(playerVideo, timing, () => {}, () => id !== runId);
     if (id !== runId) return;
     const all = [...buildMetadataChecks({ info, timing }), ...buildFrameChecks({ samples })];
-    renderChecks(all);
-    const blocked = all.some((c) => c.status === "block");
-    if (blocked) {
-      const msg = all.find((c) => c.status === "block").detail;
-      checkBlockers.innerHTML = "";
-      const p = document.createElement("p");
-      p.className = "block-msg";
-      p.textContent = msg;
-      checkBlockers.appendChild(p);
-      playerNotice.textContent = msg;
-      playerNotice.hidden = false;
-    }
+    renderNotes(all);
   } catch (err) {
     if (id !== runId) return;
-    // A failed background check is a warning, not a block: the user can still measure.
-    const all = [
+    // A failed background check is a note, not a block: the user can still measure.
+    renderNotes([
       ...buildMetadataChecks({ info, timing }),
       { id: "frames", label: "Frame checks", status: "warn", detail: `Could not run: ${err.message}` },
-    ];
-    renderChecks(all);
-  } finally {
-    if (id === runId) checkProgress.hidden = true;
+    ]);
   }
 }
 
@@ -178,14 +121,9 @@ async function onVideoPicked(event) {
   if (!file) return;
 
   const id = ++runId;
+  calibration.clear();
   document.getElementById("video-name").textContent = file.name;
   intakeBox.hidden = true;
-  playerNotice.hidden = true;
-  checkStatus.textContent = "Checking video…";
-  checkList.innerHTML = "";
-  checkBlockers.innerHTML = "";
-  checkNote.hidden = true;
-  btnContinue.disabled = true;
   showScreen("check");
 
   const inspected = await inspectVideoFile(file);
@@ -196,19 +134,17 @@ async function onVideoPicked(event) {
   if (currentObjectUrl && currentObjectUrl !== inspected.objectUrl) URL.revokeObjectURL(currentObjectUrl);
   currentObjectUrl = inspected.objectUrl;
 
-  if (!inspected.result.ok) {
-    checkStatus.textContent = "Cannot analyze this video";
-    checkStatus.className = "status error";
-    return;
-  }
+  // Only a file that cannot be read stops here.
+  if (!inspected.result.ok) return;
 
-  currentTiming = await readFrameTiming(file);
+  const timing = await readFrameTiming(file);
   if (id !== runId) return;
-  currentInfo = info;
-  loadPlayer(currentObjectUrl, currentTiming);
-  showMetadataChecks(id, info, currentTiming);
-  // Not awaited: the user can continue while frames are checked in the background.
-  runFrameChecks(id, info, currentTiming);
+  loadPlayer(currentObjectUrl, timing);
+  showScreen("player");
+  renderNotes(buildMetadataChecks({ info, timing }), { pending: true });
+
+  // Not awaited: the player works while frames are checked in the background.
+  runFrameChecks(id, info, timing);
 }
 
 fileInput.addEventListener("change", onVideoPicked);
@@ -219,9 +155,8 @@ document.getElementById("btn-check-back").addEventListener("click", () => {
   runId++;
   showScreen("start");
 });
-btnContinue.addEventListener("click", () => showScreen("player"));
-document.getElementById("btn-player-back").addEventListener("click", () => showScreen("check"));
 document.getElementById("btn-player-new").addEventListener("click", () => {
   runId++;
+  calibration.clear();
   showScreen("start");
 });
