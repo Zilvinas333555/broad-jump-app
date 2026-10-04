@@ -45,6 +45,13 @@
   <!-- Screen 2: footage quality check. Warnings only; BLOCK stops the flow. -->
   <section id="screen-check" class="screen">
 
+    <!-- The one video element. It is visible here during checks (iPhone will not seek hidden video) and moves to the player on Continue. -->
+    <div class="card preview-card">
+      <div id="preview-slot" class="video-slot">
+        <video id="player-video" playsinline preload="auto"></video>
+      </div>
+    </div>
+
     <div id="intake" class="card" hidden>
       <h2>File</h2>
       <p id="video-name" class="muted"></p>
@@ -72,7 +79,7 @@
   <!-- Screen 3: player -->
   <section id="screen-player" class="screen">
     <div class="card player-card">
-      <video id="player-video" playsinline preload="auto"></video>
+      <div id="player-slot" class="video-slot"></div>
       <p id="readout" class="readout">0.000 s · frame 0</p>
       <input id="timeline" type="range" min="0" max="0" step="0.001" value="0" aria-label="Timeline" />
       <button id="btn-play" class="big-btn primary" type="button">Play</button>

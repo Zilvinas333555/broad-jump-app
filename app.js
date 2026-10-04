@@ -10,10 +10,17 @@ const screens = {
   player: document.getElementById("screen-player"),
 };
 
+// The video element moves between the check preview and the player. It must stay visible
+// (not display:none) while frames are being checked, or iPhone Safari stops seeking.
+const previewSlot = document.getElementById("preview-slot");
+const playerSlot = document.getElementById("player-slot");
+
 function showScreen(name) {
   for (const [key, el] of Object.entries(screens)) {
     el.classList.toggle("active", key === name);
   }
+  if (name === "check") previewSlot.appendChild(playerVideo);
+  if (name === "player") playerSlot.appendChild(playerVideo);
   window.scrollTo(0, 0);
 }
 

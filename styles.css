@@ -166,3 +166,16 @@ button:disabled, .big-btn:disabled { opacity: 0.4; }
 #check-list li.check > div { flex: 1; text-align: left; }
 #check-list li.check .icon { color: inherit; }
 #check-list li.check span:first-child { color: inherit; }
+
+/* Stage 5: the single video element, shown in the check preview and in the player */
+.video-slot:empty { display: none; }
+.video-slot video {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  background: #000;
+  border-radius: 8px;
+  object-fit: contain;
+}
+.preview-card { padding: 8px; }
+.preview-card .video-slot video { max-height: 35vh; }
