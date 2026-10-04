@@ -15,6 +15,9 @@
 
 <main id="app">
 
+  <!-- Shows script errors on the phone, where no debugger is available -->
+  <p id="fatal-error" class="block-msg" hidden></p>
+
   <!-- Screen 1: start -->
   <section id="screen-start" class="screen active">
 
@@ -110,6 +113,18 @@
 
 </main>
 
+<script>
+  // Plain script (not module), so it runs even if a module fails to load.
+  function showFatal(message) {
+    var el = document.getElementById("fatal-error");
+    el.hidden = false;
+    el.textContent = message;
+  }
+  window.addEventListener("error", function (e) { showFatal("Script error: " + e.message); });
+  window.addEventListener("unhandledrejection", function (e) {
+    showFatal("Error: " + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
+</script>
 <script src="app.js" type="module"></script>
 </body>
 </html>

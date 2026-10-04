@@ -115,7 +115,7 @@ async function runFrameChecks(id, info, timing) {
   }
 }
 
-async function onVideoPicked(event) {
+async function handlePick(event) {
   const file = event.target.files && event.target.files[0];
   event.target.value = "";
   if (!file) return;
@@ -145,6 +145,22 @@ async function onVideoPicked(event) {
 
   // Not awaited: the player works while frames are checked in the background.
   runFrameChecks(id, info, timing);
+}
+
+// Any failure while handling a file is shown on screen, so it can be reported without a debugger.
+async function onVideoPicked(event) {
+  try {
+    await handlePick(event);
+  } catch (err) {
+    showFatal(`Could not open this video: ${err && err.message ? err.message : err}`);
+  }
+}
+
+function showFatal(message) {
+  intakeStatus.textContent = message;
+  intakeStatus.className = "status error";
+  intakeBox.hidden = false;
+  showScreen("check");
 }
 
 fileInput.addEventListener("change", onVideoPicked);
