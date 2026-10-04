@@ -150,7 +150,6 @@ async function onVideoPicked(event) {
 fileInput.addEventListener("change", onVideoPicked);
 fileCapture.addEventListener("change", onVideoPicked);
 
-document.getElementById("btn-record").addEventListener("click", () => fileCapture.click());
 document.getElementById("btn-check-back").addEventListener("click", () => {
   runId++;
   showScreen("start");

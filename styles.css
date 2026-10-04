@@ -219,3 +219,15 @@ button:disabled, .big-btn:disabled { opacity: 0.4; }
 .notes-title { margin: 0 0 6px; font-size: 13px; color: var(--warn); text-transform: uppercase; letter-spacing: 0.05em; }
 .notes-list { margin: 0 0 6px; padding-left: 18px; font-size: 14px; line-height: 1.5; }
 #footage-notes .note { font-size: 12px; }
+
+/* Stage 6 (fix): a real file input covers the whole button, so the tap opens the picker directly */
+.file-btn { position: relative; overflow: hidden; cursor: pointer; }
+.file-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px; /* stops iPhone zooming on focus */
+}

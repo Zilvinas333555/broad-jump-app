@@ -33,12 +33,16 @@
       </p>
     </div>
 
-    <button id="btn-record" class="big-btn primary" type="button">Record video</button>
-    <label id="btn-upload" class="big-btn secondary" for="file-input">Upload video</label>
-    <input id="file-input" type="file" accept="video/*" hidden />
-
-    <!-- Recording uses the native camera app, so no in-page camera access is needed -->
-    <input id="file-capture" type="file" accept="video/*" capture="environment" hidden />
+    <!-- The file inputs sit directly over the buttons (transparent), so a tap opens the picker
+         without relying on a hidden input or a script click. Recording uses the native camera app. -->
+    <div class="file-btn big-btn primary">
+      Record video
+      <input id="file-capture" class="file-input" type="file" accept="video/*" capture="environment" aria-label="Record video" />
+    </div>
+    <div class="file-btn big-btn secondary">
+      Upload video
+      <input id="file-input" class="file-input" type="file" accept="video/*" aria-label="Upload video" />
+    </div>
 
   </section>
 
