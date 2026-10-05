@@ -42,6 +42,28 @@ export function insideContent(rect, bx, by) {
   return bx >= rect.x && bx <= rect.x + rect.w && by >= rect.y && by <= rect.y + rect.h;
 }
 
+// Magnifier (loupe): shown while a finger or mouse button is held down on the picture.
+export const LOUPE_SIZE_PX = 120;   // on-screen diameter
+export const LOUPE_ZOOM = 3;        // magnification
+const LOUPE_LIFT_PX = 90;           // how far above the touch point the loupe sits, so the finger does not hide it
+
+// The part of the video (in video pixels) that the loupe shows, centred on box point (bx, by).
+export function loupeSource(rect, bx, by, size = LOUPE_SIZE_PX, zoom = LOUPE_ZOOM) {
+  const spanBox = size / zoom;             // box pixels covered by the loupe
+  const c = boxToVideo(rect, bx, by);
+  const half = spanBox / 2 / rect.scale;   // the same span, converted to video pixels
+  return { sx: c.x - half, sy: c.y - half, sw: 2 * half, sh: 2 * half };
+}
+
+// Top-left corner of the loupe inside the picture box. Above the finger when there is room, below otherwise.
+export function loupePlacement(bx, by, boxW, boxH, size = LOUPE_SIZE_PX, lift = LOUPE_LIFT_PX) {
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+  const left = clamp(bx - size / 2, 0, boxW - size);
+  const above = by - lift - size / 2;
+  const top = above >= 0 ? above : by + lift - size / 2;
+  return { left, top: clamp(top, 0, boxH - size) };
+}
+
 // ---------------------------------------------------------------------------
 // DOM part
 
@@ -51,6 +73,7 @@ const COLORS = { a: "#4da3ff", b: "#ffb24d" };
 // video: the player's <video>; canvas: overlay on top of it; els: panel elements; currentFrame(): frame index.
 // Returns { getCalibration(), clear() }.
 export function mountCalibration({ video, canvas, els, currentFrame }) {
+  // els.loupe: the magnifier canvas, which sits over the picture and ignores pointer events.
   const ctx = canvas.getContext("2d");
   const points = { a: null, b: null };
   let mode = "a";
@@ -132,10 +155,79 @@ export function mountCalibration({ video, canvas, els, currentFrame }) {
     updateStep();
   }
 
+  // Press and hold to aim: the loupe follows the finger, and releasing places the point at the crosshair.
+  let aim = null;   // { x, y } in box pixels while the pointer is down
+  const pointInBox = (e) => {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  function drawLoupe() {
+    const boxW = canvas.clientWidth;
+    const boxH = canvas.clientHeight;
+    const pos = loupePlacement(aim.x, aim.y, boxW, boxH);
+    const loupe = els.loupe;
+    loupe.style.left = pos.left + "px";
+    loupe.style.top = pos.top + "px";
+    loupe.hidden = false;
+
+    const dpr = window.devicePixelRatio || 1;
+    const size = LOUPE_SIZE_PX;
+    if (loupe.width !== Math.round(size * dpr)) {
+      loupe.width = Math.round(size * dpr);
+      loupe.height = Math.round(size * dpr);
+    }
+    const lctx = loupe.getContext("2d");
+    lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    lctx.fillStyle = "#000";
+    lctx.fillRect(0, 0, size, size);
+
+    const rect = video.videoWidth
+      ? contentRect(boxW, boxH, video.videoWidth, video.videoHeight)
+      : null;
+    if (rect && insideContent(rect, aim.x, aim.y)) {
+      const src = loupeSource(rect, aim.x, aim.y);
+      lctx.drawImage(video, src.sx, src.sy, src.sw, src.sh, 0, 0, size, size);
+    }
+    // Crosshair at the centre: this is exactly where the point will be placed.
+    lctx.strokeStyle = "#ffffff";
+    lctx.lineWidth = 1;
+    lctx.beginPath();
+    lctx.moveTo(size / 2, 8); lctx.lineTo(size / 2, size - 8);
+    lctx.moveTo(8, size / 2); lctx.lineTo(size - 8, size / 2);
+    lctx.stroke();
+    lctx.fillStyle = COLORS[mode];
+    lctx.beginPath();
+    lctx.arc(size / 2, size / 2, 4, 0, Math.PI * 2);
+    lctx.fill();
+  }
+
+  function hideLoupe() {
+    els.loupe.hidden = true;
+  }
+
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
-    const r = canvas.getBoundingClientRect();
-    place(e.clientX - r.left, e.clientY - r.top);
+    // Keeps move/up events on the canvas even if the finger slides off it. Failure must not stop aiming.
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* pointer not active */ }
+    aim = pointInBox(e);
+    drawLoupe();
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!aim) return;
+    aim = pointInBox(e);
+    drawLoupe();
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    if (!aim) return;
+    const p = pointInBox(e);
+    aim = null;
+    hideLoupe();
+    place(p.x, p.y);
+  });
+  canvas.addEventListener("pointercancel", () => {
+    aim = null;
+    hideLoupe();
   });
 
   els.setA.addEventListener("click", () => { mode = "a"; updateStep(); });

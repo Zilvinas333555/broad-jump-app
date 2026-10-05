@@ -38,6 +38,7 @@ const calibration = mountCalibration({
     cm: document.getElementById("calib-cm"),
     save: document.getElementById("btn-calib-save"),
     result: document.getElementById("calib-result"),
+    loupe: document.getElementById("calib-loupe"),
   },
   currentFrame: currentFrameIndex,
 });
