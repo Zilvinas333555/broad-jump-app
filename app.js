@@ -1,9 +1,13 @@
-// Stage 2: intake. Stage 3: player. Stage 5: footage checks (notes only, never a gate). Stage 6: calibration.
+// Stage 2: intake. Stage 3: player. Stage 5: footage checks (notes only, never a gate).
+// Stage 6: calibration. Stage 7-8: jump markers and distance. Stage 9: the jump list.
 import { inspectVideoFile } from "./video-intake.js";
 import { readFrameTiming } from "./mp4-timing.js";
-import { loadPlayer, playerVideo, currentFrameIndex } from "./player.js";
+import { loadPlayer, playerVideo, currentFrameIndex, goToFrame } from "./player.js";
 import { sampleFootage, buildMetadataChecks, buildFrameChecks } from "./footage-checks.js";
+import { mountAimer } from "./marker-pair.js";
 import { mountCalibration } from "./calibration.js";
+import { mountJumpMarking } from "./jump-marking.js";
+import { summarizeJumps } from "./jumps.js";
 
 const screens = {
   start: document.getElementById("screen-start"),
@@ -28,9 +32,20 @@ const notesBox = document.getElementById("footage-notes");
 const notesTitle = notesBox.querySelector(".notes-title");
 const notesList = document.getElementById("footage-notes-list");
 
-const calibration = mountCalibration({
+// One shared aimer: calibration and jump marking each hand it a "scene" when they become active,
+// so there is only ever one set of pointer listeners on the video overlay.
+const aimer = mountAimer({
   video: playerVideo,
-  canvas: document.getElementById("calib-overlay"),
+  canvas: document.getElementById("marker-overlay"),
+  loupe: document.getElementById("marker-loupe"),
+  currentFrame: currentFrameIndex,
+});
+
+const btnAddJump = document.getElementById("btn-add-jump");
+const jumpsHint = document.getElementById("jumps-hint");
+
+const calibration = mountCalibration({
+  aimer,
   els: {
     step: document.getElementById("calib-step"),
     setA: document.getElementById("btn-set-a"),
@@ -38,10 +53,91 @@ const calibration = mountCalibration({
     cm: document.getElementById("calib-cm"),
     save: document.getElementById("btn-calib-save"),
     result: document.getElementById("calib-result"),
-    loupe: document.getElementById("calib-loupe"),
   },
-  currentFrame: currentFrameIndex,
+  onChange: updateAddJumpAvailability,
 });
+
+function updateAddJumpAvailability() {
+  const calibrated = Boolean(calibration.getCalibration());
+  btnAddJump.disabled = !calibrated || jumpMarking.isOpen();
+  jumpsHint.hidden = calibrated;
+}
+
+const jumpMarking = mountJumpMarking({
+  aimer,
+  els: {
+    card: document.getElementById("jump-card"),
+    title: document.getElementById("jump-card-title"),
+    step: document.getElementById("jump-step"),
+    setTakeoff: document.getElementById("btn-set-takeoff"),
+    setLanding: document.getElementById("btn-set-landing"),
+    result: document.getElementById("jump-result"),
+    cancel: document.getElementById("btn-jump-cancel"),
+    save: document.getElementById("btn-jump-save"),
+  },
+  getCalibration: calibration.getCalibration,
+  goToFrame,
+});
+
+// Jumps for the video currently loaded. Not persisted yet (Stage 10).
+let jumps = [];
+let nextJumpId = 1;
+
+const jumpsTable = document.getElementById("jumps-table");
+const jumpsRows = document.getElementById("jumps-rows");
+const jumpsEmpty = document.getElementById("jumps-empty");
+const jumpsSummary = document.getElementById("jumps-summary");
+
+function renderJumps() {
+  jumpsEmpty.hidden = jumps.length > 0;
+  jumpsTable.hidden = jumps.length === 0;
+  jumpsSummary.hidden = jumps.length === 0;
+  jumpsRows.innerHTML = "";
+
+  jumps.forEach((jump, i) => {
+    const tr = document.createElement("tr");
+    tr.tabIndex = 0;
+    tr.className = "jump-row";
+    const num = document.createElement("td");
+    num.textContent = String(i + 1);
+    const dist = document.createElement("td");
+    dist.textContent = jump.distanceM == null ? "—" : `${jump.distanceM.toFixed(2)} m`;
+    const edit = document.createElement("td");
+    edit.textContent = "Edit";
+    edit.className = "edit-link";
+    tr.append(num, dist, edit);
+    const openThis = () => openJumpEditor(jump, i);
+    tr.addEventListener("click", openThis);
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openThis(); });
+    jumpsRows.appendChild(tr);
+  });
+
+  const { best, average } = summarizeJumps(jumps);
+  jumpsSummary.textContent = jumps.length
+    ? `Best: ${best.toFixed(2)} m · Average: ${average.toFixed(2)} m · ${jumps.length} attempt${jumps.length === 1 ? "" : "s"}`
+    : "";
+}
+
+function openJumpEditor(jump, index) {
+  document.getElementById("jump-card-title").textContent = jump ? `Edit jump ${index + 1}` : "New jump";
+  jumpMarking.open(jump || null);
+  updateAddJumpAvailability();
+}
+
+btnAddJump.addEventListener("click", () => openJumpEditor(null, -1));
+
+jumpMarking.onSave((result) => {
+  if (result.id != null) {
+    const i = jumps.findIndex((j) => j.id === result.id);
+    if (i !== -1) jumps[i] = result;
+  } else {
+    jumps.push({ ...result, id: nextJumpId++ });
+  }
+  renderJumps();
+  updateAddJumpAvailability();
+});
+
+document.getElementById("btn-jump-cancel").addEventListener("click", updateAddJumpAvailability);
 
 let currentObjectUrl = null;
 // Each pick gets a run id, so a slow check for an old file cannot overwrite the new one.
@@ -116,13 +212,24 @@ async function runFrameChecks(id, info, timing) {
   }
 }
 
+function resetForNewVideo() {
+  // Order matters: whichever of these runs last owns the shared aimer's active scene.
+  // Calibration must be the one left active, so it goes last.
+  jumpMarking.close();
+  calibration.clear();
+  jumps = [];
+  nextJumpId = 1;
+  renderJumps();
+  updateAddJumpAvailability();
+}
+
 async function handlePick(event) {
   const file = event.target.files && event.target.files[0];
   event.target.value = "";
   if (!file) return;
 
   const id = ++runId;
-  calibration.clear();
+  resetForNewVideo();
   document.getElementById("video-name").textContent = file.name;
   intakeBox.hidden = true;
   showScreen("check");
@@ -173,6 +280,9 @@ document.getElementById("btn-check-back").addEventListener("click", () => {
 });
 document.getElementById("btn-player-new").addEventListener("click", () => {
   runId++;
-  calibration.clear();
+  resetForNewVideo();
   showScreen("start");
 });
+
+renderJumps();
+updateAddJumpAvailability();

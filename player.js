@@ -59,6 +59,14 @@ export function stepFrames(delta) {
   seekToFrame((currentFrame() ?? 0) + delta);
 }
 
+// Jumps to an absolute frame number. Used when opening a saved jump for editing, so its
+// takeoff frame is visible right away.
+export function goToFrame(n) {
+  if (!timing) return;
+  pause();
+  seekToFrame(n);
+}
+
 export function togglePlay() {
   if (el.video.paused) {
     pendingFrame = null;

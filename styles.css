@@ -184,7 +184,7 @@ button:disabled, .big-btn:disabled { opacity: 0.4; }
 
 /* Stage 6: calibration overlay sits exactly over the video picture */
 #player-slot { position: relative; }
-#calib-overlay {
+#marker-overlay {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -244,3 +244,26 @@ button:disabled, .big-btn:disabled { opacity: 0.4; }
   z-index: 2;
   background: #000;
 }
+
+/* Stage 7-9: jump marking and the jumps list */
+.jump-card { display: flex; flex-direction: column; gap: 10px; }
+.jump-card h2 { margin: 0; }
+#jump-result { margin: 0; text-align: center; min-height: 1.3em; color: #4dd48a; }
+
+.jumps-card { display: flex; flex-direction: column; gap: 10px; }
+.jumps-card h2 { margin: 0; }
+.jumps-table { width: 100%; border-collapse: collapse; }
+.jumps-table th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.jumps-table td { padding: 12px 4px; border-bottom: 1px solid var(--border); font-size: 16px; }
+.jump-row { cursor: pointer; }
+.jump-row:active { background: var(--panel); }
+.jump-row .edit-link { color: var(--accent); text-align: right; width: 50px; }
+#jumps-summary { font-weight: 600; color: var(--text); }
